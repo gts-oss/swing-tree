@@ -2,6 +2,7 @@ package swingtree;
 
 import org.jspecify.annotations.Nullable;
 import sprouts.HasId;
+import sprouts.Var;
 import swingtree.api.mvvm.ViewSupplier;
 import swingtree.components.JScrollPanels;
 
@@ -89,28 +90,41 @@ final class ModelToViewConverter<M> implements ViewSupplier<M> {
         return parent;
     }
 
-    private Object _idFrom( M model ) {
+    private @Nullable JComponent _findCachedViewIn(M model) throws Exception {
+        JComponent parent = _subViewParent();
+        if ( parent != null ) {
+            Object id = _idFrom(model);
+            for ( JComponent existingSubView : this.childComponents ) {
+                if ( existingSubView instanceof JScrollPanels.EntryPanel ) {
+                    JScrollPanels.EntryPanel entryPanel = (JScrollPanels.EntryPanel) existingSubView;
+                    JComponent actualView = (JComponent) entryPanel.getComponent(0);
+                    Object foundId = actualView.getClientProperty(UNIQUE_VIEW_CACHE_KEY);
+                    if ( Objects.equals(id, foundId) ) {
+                        actualView.putClientProperty(UNIQUE_VIEW_CACHE_KEY, id);
+                        return existingSubView;
+                    }
+                } else {
+                    Object foundId = existingSubView.getClientProperty(UNIQUE_VIEW_CACHE_KEY);
+                    if ( Objects.equals(id, foundId) ) {
+                        existingSubView.putClientProperty(UNIQUE_VIEW_CACHE_KEY, id);
+                        return existingSubView;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private @Nullable Object _idFrom( Object model ) {
+        if ( model instanceof Var )
+            model = ((Var<?>) model).orElseNull();
+
         Object id = model;
         if ( model instanceof HasId ) {
             HasId<?> idModel = (HasId<?>) model;
             id = idModel.id();
         }
         return id;
-    }
-
-    private @Nullable JComponent _findCachedViewIn(M model) throws Exception {
-        JComponent parent = _subViewParent();
-        if ( parent != null ) {
-            Object id = _idFrom(model);
-            for ( JComponent existingSubView : this.childComponents ) {
-                Object foundId = existingSubView.getClientProperty(UNIQUE_VIEW_CACHE_KEY);
-                if ( Objects.equals(id, foundId) ) {
-                    existingSubView.putClientProperty(UNIQUE_VIEW_CACHE_KEY, id);
-                    return existingSubView;
-                }
-            }
-        }
-        return null;
     }
 
 }
