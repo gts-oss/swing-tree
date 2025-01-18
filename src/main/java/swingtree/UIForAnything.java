@@ -584,6 +584,13 @@ public abstract class UIForAnything<I, C extends E, E extends Component>
     {
         Objects.requireNonNull(val);
         Objects.requireNonNull(displayAction);
+        _onShowDelegated( val, thisComponent, (component, delegate) -> displayAction.accept(component, delegate.currentValue().orElseNull()));
+    }
+
+    protected final <T> void _onShowDelegated( Val<T> val, C thisComponent, BiConsumer<C, ValDelegate<T>> displayAction )
+    {
+        Objects.requireNonNull(val);
+        Objects.requireNonNull(displayAction);
         Ref<Val<T>> valRef;
         if ( val.isLens() || val.isView() )
             valRef = Ref.of(val);
@@ -597,7 +604,7 @@ public abstract class UIForAnything<I, C extends E, E extends Component>
         else
             valRef = Ref.of(new WeakReference<>(val));
 
-        _onShow( valRef, new WeakReference<>(thisComponent), displayAction );
+        _onShowDelegated( valRef, new WeakReference<>(thisComponent), displayAction );
     }
 
     protected final <T> UIForAnything<I,C,E> _withOnShow( Val<T> val, BiConsumer<C, T> displayAction )
@@ -615,12 +622,22 @@ public abstract class UIForAnything<I, C extends E, E extends Component>
         Objects.requireNonNull(propertyRef);
         Objects.requireNonNull(weakComponent);
         Objects.requireNonNull(displayAction);
+        _onShowDelegated(propertyRef, weakComponent, (component, delegate) -> displayAction.accept(component, delegate.currentValue().orElseNull()));
+    }
+
+    private <T> void _onShowDelegated(
+        Ref<Val<T>>       propertyRef,
+        WeakReference<C>  weakComponent,
+        BiConsumer<C, ValDelegate<T>>  displayAction
+    ) {
+        Objects.requireNonNull(propertyRef);
+        Objects.requireNonNull(weakComponent);
+        Objects.requireNonNull(displayAction);
         Action<ValDelegate<T>> action = Action.ofWeak(Objects.requireNonNull(weakComponent.get()), (localComponent, delegate)->{
-            T v = delegate.currentValue().orElseNull(); // IMPORTANT! We first capture the value and then execute the action in the app thread.
             _runInUI(() ->
                 UI.run( () -> {
                     try {
-                        displayAction.accept(localComponent, v); // Here the captured value is used. This is extremely important!
+                        displayAction.accept(localComponent, delegate); // Here the captured value is used. This is extremely important!
                         /*
                              Since this is happening in another thread we are using the captured property item/value.
                              The property might have changed in the meantime, but we don't care about that,
