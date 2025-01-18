@@ -13,14 +13,14 @@ final class ArrayPropertyComboModel<E extends @Nullable Object> extends Abstract
 	ArrayPropertyComboModel( Var<E> selection, Val<E[]> items ) {
 		super(selection);
 		_items = items;
-		_selectedIndex = _indexOf(_selectedItem.orElseNull());
+		_selectedIndex = _indexOf(_getSelectedItemSafely());
 		_mutable = false;
 	}
 
 	ArrayPropertyComboModel( Var<E> selection, Var<E[]> items ) {
 		super(selection);
 		_items = items;
-		_selectedIndex = _indexOf(_selectedItem.orElseNull());
+		_selectedIndex = _indexOf(_getSelectedItemSafely());
 		_mutable = true;
 	}
 

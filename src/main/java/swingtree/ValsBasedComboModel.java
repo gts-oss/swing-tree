@@ -13,13 +13,13 @@ class ValsBasedComboModel<E extends @Nullable Object> extends AbstractComboModel
     ValsBasedComboModel( Vals<E> items ) {
         super(Var.ofNullable(_findCommonType(items), null));
         _items         = Objects.requireNonNull(items);
-        _selectedIndex = _indexOf(_selectedItem.orElseNull());
+        _selectedIndex = _indexOf(_getSelectedItemSafely());
     }
 
     ValsBasedComboModel( Var<E> var, Vals<E> items ) {
         super(var);
         _items         = Objects.requireNonNull(items);
-        _selectedIndex = _indexOf(_selectedItem.orElseNull());
+        _selectedIndex = _indexOf(_getSelectedItemSafely());
     }
 
     @Override public int getSize() { return _items.size(); }

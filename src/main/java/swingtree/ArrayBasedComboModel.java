@@ -17,7 +17,7 @@ final class ArrayBasedComboModel<E extends @Nullable Object> extends AbstractCom
 	ArrayBasedComboModel(Var<E> selection, E @Nullable[] items) {
 		super(selection);
 		_items = Objects.requireNonNull(items);
-		_selectedIndex = _indexOf(_selectedItem.orElseNull());
+		_selectedIndex = _indexOf(_getSelectedItemSafely());
 	}
 
 

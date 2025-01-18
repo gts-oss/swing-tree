@@ -2,10 +2,11 @@ package swingtree;
 
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
+import sprouts.Channel;
 import sprouts.From;
 import sprouts.Var;
 
-import javax.swing.ComboBoxModel;
+import javax.swing.*;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 import java.util.ArrayList;
@@ -25,8 +26,8 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 	private static final Logger log = org.slf4j.LoggerFactory.getLogger(AbstractComboModel.class);
 
 	protected int _selectedIndex = -1;
-	final Var<E> _selectedItem;
-	protected java.util.List<ListDataListener> listeners = new ArrayList<>();
+	private final Var<E> _selectedItem;
+	private final java.util.List<ListDataListener> listeners = new ArrayList<>();
 
 	private boolean _acceptsEditorChanges = true; // This is important to prevent getting feedback loops!
 
@@ -89,18 +90,29 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 					anItem = convertedItem;
 			}
 		}
-        E old = _selectedItem.orElseNull();
+        E old = _getSelectedItemSafely();
 		Object finalAnItem = anItem;
 		doQuietly(()-> {
-			_selectedItem.set(From.VIEW, (E) NullUtil.fakeNonNull(finalAnItem));
-			_selectedIndex = _indexOf(finalAnItem);
-			if ( !Objects.equals(old, finalAnItem) )
+			E newItemInModel = _setSelectedItemSafely(From.VIEW, (E) NullUtil.fakeNonNull(finalAnItem));
+			_selectedIndex = _indexOf(newItemInModel);
+			if ( !Objects.equals(old, newItemInModel) )
 				fireListeners();
 		});
 	}
 
 	/** {@inheritDoc} */
-	@Override public @Nullable Object getSelectedItem() { return _selectedItem.orElseNull(); }
+	@Override public @Nullable Object getSelectedItem() {
+		try {
+			return _selectedItem.orElseNull();
+			/*
+				The property type is an interface, it can have any kind of faulty implementation.
+				So we need to protect the GUI's control flow from any possible exceptions.
+			 */
+		} catch (Exception e) {
+			log.error("Failed to fetch selected combo box item from bound property '{}', due to exception.", _selectedItem, e);
+		}
+		return null;
+	}
 
 	/** {@inheritDoc} */
 	@Override public void addListDataListener( ListDataListener l ) { listeners.add(l); }
@@ -134,8 +146,9 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 	abstract protected void setAt( int index, @Nullable E element );
 
     void updateSelectedIndex() {
-        if ( _selectedIndex >= 0 && !_selectedItem.is(getElementAt(_selectedIndex)) )
-            _selectedIndex = _indexOf(_selectedItem.orElseNull());
+		E currentSelection = _getSelectedItemSafely();
+        if ( _selectedIndex >= 0 && !Objects.equals(currentSelection, getElementAt(_selectedIndex)) )
+            _selectedIndex = _indexOf(currentSelection);
     }
 
 	void setFromEditor( String o ) {
@@ -145,16 +158,16 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 		updateSelectedIndex();
 		if ( _selectedIndex != -1 ) {
 			try {
-				E e = _convert(o);
-				this.setAt( _selectedIndex, e );
-				boolean stateChanged = _selectedItem.orElseNull() != e;
-				_selectedItem.set(From.VIEW, NullUtil.fakeNonNull(e));
+				E newItemToStore = _convert(o);
+				this.setAt( _selectedIndex, newItemToStore );
+				boolean stateChanged = !Objects.equals(_getSelectedItemSafely(),newItemToStore);
+				_setSelectedItemSafely(From.VIEW, NullUtil.fakeNonNull(newItemToStore));
 				if ( stateChanged )
 					doQuietly(this::fireListeners);
 
 			} catch (Exception ignored) {
 				// It looks like conversion was not successful
-				// So this means the editor input could not be converted to the type of the combo box
+				// This means the editor input could not be converted to the type of the combo box
 				// So we'll just ignore it
 			}
 		}
@@ -199,7 +212,7 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 			} catch ( NumberFormatException e ) {
 				// We failed to parse the number... the input is invalid!
 				// So we cannot update the model, and simply return the old value:
-				return _selectedItem.orElseNull();
+				return _getSelectedItemSafely();
 			}
 		}
 		// What now? Hmmm, let's try Boolean!
@@ -213,7 +226,7 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 
 			// We failed to parse the boolean... the input is invalid!
 			// So we cannot update the model, and simply return the old value:
-			return _selectedItem.orElseNull();
+			return _getSelectedItemSafely();
 		}
 		// Ok maybe it's an enum?
 		if ( type.isEnum() ) {
@@ -250,7 +263,7 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 			}
 			// We failed to parse the enum... the input is invalid!
 			// So we cannot update the model, and simply return the old value:
-			return _selectedItem.orElseNull();
+			return _getSelectedItemSafely();
 		}
 		// Or a character?
 		if ( type == Character.class ) {
@@ -261,12 +274,12 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 				char c = o.charAt(0);
 				for ( int i = 1; i < o.length(); i++ )
 					if ( o.charAt(i) != c )
-						return _selectedItem.orElseNull();
+						return _getSelectedItemSafely();
 				return type.cast(c);
 			}
 			// We failed to parse the character... the input is invalid!
 			// So we cannot update the model, and simply return the old value:
-			return _selectedItem.orElseNull();
+			return _getSelectedItemSafely();
 		}
 		// Now it's getting tricky, but we don't give up. How about arrays?
 		if ( type.isArray() ) {
@@ -295,7 +308,50 @@ abstract class AbstractComboModel<E extends @Nullable Object> implements ComboBo
 		}
 
 		// What else is there? We don't know, so we just return the old value:
-		return _selectedItem.orElseNull();
+		return _getSelectedItemSafely();
+	}
+
+	/**
+	 *  The property type is an interface, it can have any kind of faulty implementation.
+	 *  So we need to protect the GUI's control flow from any possible exceptions.
+	 *  An exception in the property means the item is now null!
+	 *
+	 * @return The selected item of the combo box, or null if nothing is selected.
+	 */
+	protected @Nullable E _getSelectedItemSafely() {
+		E item = null;
+		try {
+			item = _selectedItem.orElseNull();
+		} catch (Exception e) {
+			log.error(
+					"Failed to fetch selected combo box item from bound property '{}', " +
+					"due to exception.",
+					_selectedItem, e
+				);
+		}
+		return item;
+	}
+
+	/**
+	 *  The property of this model can be a property lens which fetch their state
+	 *  dynamically through a lambda expression. This lambda expression can fail, especially
+	 *  when it is client code. So we need to protect the GUIs control flow fom these exceptions.
+	 *  An exception in the property lens means the item is now null!
+	 *
+	 * @return The new item selected, or null if the selection failed.
+	 */
+	protected @Nullable E _setSelectedItemSafely(Channel channel, E newItem) {
+		try {
+			_selectedItem.set(channel, newItem);
+			return newItem;
+		} catch (Exception e) {
+			log.error(
+					"Failed to set the selected combo box item in the bound property '{}', " +
+					"due to exception.",
+					_selectedItem, e
+			);
+		}
+		return null;
 	}
 
 	protected int _indexOf( @Nullable Object anItem ) {

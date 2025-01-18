@@ -14,20 +14,20 @@ class VarsBasedComboModel<E extends @Nullable Object> extends AbstractComboModel
     VarsBasedComboModel( Vars<E> items ) {
         super(Var.ofNullable(_findCommonType(items), null));
         _items         = Objects.requireNonNull(items);
-        _selectedIndex = _indexOf(_selectedItem.orElseNull());
+        _selectedIndex = _indexOf(_getSelectedItemSafely());
         Viewables.cast(_items).onChange(it -> _itemListChanged() );
     }
 
     VarsBasedComboModel( Var<E> var, Vars<E> items ) {
         super(var);
         _items         = Objects.requireNonNull(items);
-        _selectedIndex = _indexOf(_selectedItem.orElseNull());
+        _selectedIndex = _indexOf(_getSelectedItemSafely());
         Viewables.cast(_items).onChange( it -> _itemListChanged() );
     }
 
     private void _itemListChanged() {
         UI.run(()-> {
-            int newSelection = _indexOf(_selectedItem.orElseNull());
+            int newSelection = _indexOf(_getSelectedItemSafely());
             if ( newSelection != _selectedIndex )
                 this.setSelectedItem(_items.at(newSelection).orElseNull());
                 // ^ This will fire the listeners for us already
